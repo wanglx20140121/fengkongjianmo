@@ -3,6 +3,8 @@ from tools.calculate import cal_max
 from tools.calculate import cal_min
 from tools.calculate import division
 from tools.calculate import cal_median
+from tools.calculate import cal_std
+import datetime
 
 # 充值次数 + 时间衍生， 充值金额 + 时间衍生
 def fee_cnt_time(dataObj):
@@ -25,7 +27,10 @@ def fee_cnt_time(dataObj):
         # 近x天单笔充值金额中位数
         result[f'{prefix}_recharge_amount_median_{day[0]}'] = cal_median(temp['amount'].values)
         # 近x天单笔充值金额最大值
-        result[f'recharge_amount_max_{day[0]}'] = cal_max(temp['amount'].values)
+        result[f'{prefix}_recharge_amount_max_{day[0]}'] = cal_max(temp['amount'].values)
+        # 近x天充值费用平均值，按笔算
+        result[f'{prefix}_recharge_amount_mean_{day[0]}_fm_cnt'] = division(sum(temp['amount'].values), temp.shape[0])
+
         for ac in amount_cut:
             amount = 10*ac
             match_df = temp[temp.amount > 10*ac]
@@ -53,10 +58,63 @@ def fee_cnt_time(dataObj):
 
 
 
+# 针对中位数和均值的衍生
+def recharge_aver_median(dataObj):
+    prefix = 'yysRecharge'
+    result = dict()
+    open_date = dataObj.open_data
+    last_modify_time = dataObj.last_modify_time
+    df_recharge = dataObj.df_recharges
+    time_limit_list = []
+    time_limit_list.append(last_modify_time)
+    for i in (1, 2, 3, 4, 5, 6):
+        time_limit_list.append(last_modify_time - datetime.timedelta(days=30 * i))
+    every_month_data = []
+    for i in range(len(time_limit_list)):
+        if (i + 1) < len(time_limit_list):
+            temp = df_recharge[(df_recharge.time > time_limit_list[i + 1]) & (df_recharge.time <= time_limit_list[i])]
+            every_month_data.append(temp)
+    my_dict = [('90d', 90, every_month_data[0: 3]), ('180d', 180, every_month_data)]
+    recharge_cnt = []
+    for temp in every_month_data:
+        recharge_cnt.append(temp.shape[0])
+    result[f'{prefix}_rechange_cnt_median'] = cal_median(recharge_cnt)
+    for md in my_dict:
+        recharge_cnt_list = []     # 存放月充值次数
+        recharge_amount_list = []  # 存放月充值金额
+        for temp in md[2]:
+            recharge_cnt_list.append(temp.shape[0])
+            recharge_amount_list.append(sum(temp['amount'].values))
+        if (last_modify_time - datetime.timedelta(md[1]) >= open_date):
+            # 月均费用平均值
+            result[f'{prefix}_recharge_amount_mean_{md[0]}_fm_month'] = division(sum(recharge_amount_list), len(recharge_amount_list))
+            # 月均充值次数
+            result[f'{prefix}_recharge_cnt_mean_{md[0]}'] = division(sum(recharge_cnt_list), len(recharge_cnt_list))
+        else:
+            fm =  fm = (last_modify_time - open_date)//30 + 1
+            # 月均费用平均值
+            result[f'{prefix}_recharge_amount_mean_{md[0]}_fm_month'] = division(sum(recharge_amount_list), fm)
+            # 月均充值次数
+            result[f'{prefix}_recharge_cnt_mean_{md[0]}'] = division(sum(recharge_cnt_list), fm)
+        # 月均充值次数最大值
+        result[f'{prefix}_recharge_cnt_max_{md[0]}'] = cal_max(recharge_cnt_list)
+        # 月均充值金额最大值
+        result[f'{prefix}_recharge_amount_month_max_{md[0]}'] = cal_max(recharge_amount_list)
+        # 月均充值次数稳定性
+        result[f'{prefix}_recharge_cnt_month_stab_{md[0]}'] = division(cal_std(recharge_cnt_list), result[f'{prefix}_recharge_cnt_mean_{md[0]}_fm_month']) if cal_std(recharge_cnt_list) != '' else ''
+        # 月均充值金额稳定性
+        result[f'{prefix}_recharge_cnt_month_stab_{md[0]}'] = division(cal_std(recharge_amount_list), result[f'{prefix}_recharge_amount_mean_{md[0]}_fm_month']) if cal_std(recharge_amount_list) != '' else ''
+
+    print('yysRecharge recharge aver median feature count:', len(result))
+    return result
+
+
 # 充值记录的特征衍生
 def yysRecharge(dataObj):
     prefix = 'yysRecharge'
     result = dict()
-    fct = fee_cnt_time(dataObj)
-    result.update(fct)
+    #fct = fee_cnt_time(dataObj)
+    ram = recharge_aver_median(dataObj)
+    #result.update(fct)
+    result.update(ram)
     return result

@@ -46,9 +46,6 @@ def fee_time(dataObj):
     day_list = {(3, '90d'), (6, '180d')}
     fee_list = [10, 20, 50, 100, 150, 200]
 
-    for md in my_dict:
-        print(f'---------{md[0]}----------')
-        print(md[1])
 
     for day in day_list:
         df_temple = my_dict[day[0]]

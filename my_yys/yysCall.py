@@ -280,12 +280,70 @@ def median_time(dataObj):
     print('yysCall median time count:', len(result))
     return result
 
+
+
 # 通话汇总
 def call_summary(dataObj):
     prefix = 'yysCall'
-
-
-
+    result = dict()
+    # 开户时间
+    open_date = dataObj.open_data
+    # 运营商数据爬取时间
+    last_modify_time = dataObj.last_modify_time
+    df_call = dataObj.df_callRecord
+    time_limit_list = []
+    time_limit_list.append(last_modify_time)
+    for i in (1, 2, 3, 4, 5, 6):
+        time_limit_list.append(last_modify_time - datetime.timedelta(days=30 * i))
+    every_month_data = []
+    for i in range(len(time_limit_list)):
+        if (i+1) < len(time_limit_list):
+            temp = df_call[(df_call.time>time_limit_list[i+1]) & (df_call.time<=time_limit_list[i])]
+            every_month_data.append(temp)
+    my_dict = [('90d',90, every_month_data[0: 3]), ('180d', 180, every_month_data)]
+    for md in my_dict:
+        call_cnt_list = []
+        dial_cnt_list = []
+        dialed_cnt_list = []
+        call_time_list = []
+        dial_time_list = []
+        dialed_time_list = []
+        for temp in md[2]:
+            call_cnt_list.append(temp.shape[0])
+            dial_cnt_list.append(temp[temp.dial_type == 'DIAL'].shape[0])
+            dialed_cnt_list.append(temp[temp.dial_type == 'DIALED'].shape[0])
+            call_time_list.append(sum(temp['duration'].values))
+            dial_time_list.append(sum(temp['duration'][temp.dial_type == 'DIAL'].values))
+            dialed_time_list.append(sum(temp['duration'][temp.dial_type == 'DIALED'].values))
+        if (last_modify_time-datetime.timedelta(md[1]) >= open_date):
+            # 月均被叫次数
+            result[f'{prefix}_dialed_avg_month_cnt_{md[0]}'] = division(sum(dialed_cnt_list), len(dialed_cnt_list))
+            # 月均主叫次数
+            result[f'{prefix}_dial_avg_month_cnt_{md[0]}'] = division(sum(dial_cnt_list), len(dial_cnt_list))
+            # 月均通话次数
+            result[f'{prefix}_call_avg_month_cnt_{md[0]}'] = division(sum(call_cnt_list), len(call_cnt_list))
+            # 月平均主叫时长
+            result[f'{prefix}_dial_avg_month_time_{md[0]}'] = division(sum(dial_time_list), len(dial_time_list))
+            # 月平均被叫时长
+            result[f'{prefix}_dialed_avg_month_time_{md[0]}'] = division(sum(dialed_time_list), len(dialed_time_list))
+            # 月平均通话时长
+            result[f'{prefix}_call_avg_month_time_{md[0]}'] = division(sum(call_time_list), len(call_time_list))
+        else:
+            fm = (last_modify_time - open_date)//30 + 1
+            # 月均被叫次数
+            result[f'{prefix}_dialed_avg_month_cnt_{md[0]}'] = division(sum(dialed_cnt_list), fm)
+            # 月均主叫次数
+            result[f'{prefix}_dial_avg_month_cnt_{md[0]}'] = division(sum(dial_cnt_list), fm)
+            # 月均通话次数
+            result[f'{prefix}_call_avg_month_cnt_{md[0]}'] = division(sum(call_cnt_list), fm)
+            # 月平均主叫时长
+            result[f'{prefix}_dial_avg_month_time_{md[0]}'] = division(sum(dial_time_list), fm)
+            # 月平均被叫时长
+            result[f'{prefix}_dialed_avg_month_time_{md[0]}'] = division(sum(dialed_time_list), fm)
+            # 月平均通话时长
+            result[f'{prefix}_call_avg_month_time_{md[0]}'] = division(sum(call_time_list), fm)
+    print('yysCall call summary feature count')
+    return result
 
 
 # 通话记录特征汇总
@@ -300,11 +358,13 @@ def yysCall(dataObj):
     ct = contact_tag(dataObj)
     # 费用区间 + 时间轴衍生
     fd = fee_day(dataObj)
-    mt = median_time(dataObj)
+    #mt = median_time(dataObj)
+    cs = call_summary(dataObj)
     #result.update(dd)
     #result.update(tid)
     # result.update(ct)
     #result.update(fd)
-    result.update(mt)
+    #result.update(mt)
+    result.update(cs)
     return result
 

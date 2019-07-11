@@ -2,7 +2,9 @@
 from tools.calculate import cal_median
 from tools.calculate import division
 from tools.calculate import cal_max
+from tools.calculate import cal_std
 import pandas as pd
+import datetime
 
 # 基于时间轴对短信次数衍生
 def cnt_day(dataObj):
@@ -91,7 +93,62 @@ def fee_contact_day(dataObj):
     print('msg fee day feature count:', len(result))
     return result
 
+# 中位数和均值相关的衍生
+def msg_aver_median(dataObj):
+    prefix = 'yysMsg'
+    result = dict()
+    # 开户时间
+    open_date = dataObj.open_data
+    # 运营商数据爬取时间
+    last_modify_time = dataObj.last_modify_time
+    df_smses = dataObj.df_smses
+    time_limit_list = []
+    time_limit_list.append(last_modify_time)
+    for i in (1, 2, 3, 4, 5, 6):
+        time_limit_list.append(last_modify_time - datetime.timedelta(days=30 * i))
+    every_month_data = []
+    for i in range(len(time_limit_list)):
+        if (i + 1) < len(time_limit_list):
+            temp = df_smses[(df_smses.time > time_limit_list[i + 1]) & (df_smses.time <= time_limit_list[i])]
+            every_month_data.append(temp)
+    my_dict = [('90d', 90, every_month_data[0: 3]), ('180d', 180, every_month_data)]
+    sms_cnt_list = []
+    for temp in every_month_data:
+        sms_cnt_list.append(temp.shape[0])
+    result[f'median_sms_cnt'] = cal_median(sms_cnt_list)
+    for md in my_dict:
+        msg_cnt_list = []
+        msg_send_list = []
+        msg_receive_list = []
+        msg_fee_list = []
+        for temp in md[2]:
+            msg_cnt_list.append(temp.shape[0])
+            msg_send_list.append(temp[temp.send_type=='SEND'].shape[0])
+            msg_receive_list.append(temp[temp.send_type=='RECEIVE'].shape[0])
+            msg_fee_list.append(sum(temp['fee'].values))
 
+        if (last_modify_time-datetime.timedelta(md[1]) >= open_date):
+            # 月平均短信次数
+            result[f'{prefix}_msg_cnt_mean_{md[0]}'] = division(sum(msg_cnt_list), len(msg_cnt_list))
+            # 月平均发送次数
+            result[f'{prefix}_msg_send_cnt_mean_{md[0]}'] = division(sum(msg_send_list), len(msg_send_list))
+            # 月平均接收次数
+            result[f'{prefix}_msg_receive_cnt_mean_{md[0]}'] = division(sum(msg_receive_list), len(msg_receive_list))
+        else:
+            fm = (last_modify_time - open_date)//30 + 1
+            # 月平均短信次数
+            result[f'{prefix}_msg_cnt_mean_{md[0]}'] = division(sum(msg_cnt_list), fm)
+            # 月平均发送次数
+            result[f'{prefix}_msg_send_cnt_mean_{md[0]}'] = division(sum(msg_send_list), fm)
+            # 月平均接收次数
+            result[f'{prefix}_msg_receive_cnt_mean_{md[0]}'] = division(sum(msg_receive_list), fm)
+        # 月均最大费用
+        result[f'{prefix}_msg_fee_max_month_{md[0]}'] = cal_max(msg_fee_list)
+        # 发送次数稳定性
+        result[f'{prefix}_msg_send_cnt_month_stab_{md[0]}'] = division(cal_std(msg_send_list), result[f'{prefix}_msg_send_cnt_mean_{md[0]}']) if cal_std(msg_send_list) != '' else ''
+        #接收次数稳定性
+        result[f'{prefix}_msg_receive_cnt_month_stab_{md[0]}'] = division(cal_std(msg_send_list), result[f'{prefix}_msg_receive_cnt_mean_{md[0]}']) if cal_std(msg_receive_list) != '' else ''
+    return result
 
 # 短信记录特征汇总
 def yysMsg(dataObj):
@@ -99,6 +156,8 @@ def yysMsg(dataObj):
     result = dict()
     #cd = cnt_day(dataObj)
     #tid = time_interval_day(dataObj)
-    fcd = fee_contact_day(dataObj)
-    result.update(fcd)
+    #fcd = fee_contact_day(dataObj)
+    mam = msg_aver_median(dataObj)
+    #result.update(fcd)
+    result.update(mam)
     return result
